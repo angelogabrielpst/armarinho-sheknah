@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+papelaria.db*
+uploads/
+.github/
+SUPABASE.md
+supabase-config.js
+supabase/
+Dockerfile
+Procfile
+MYSQL-DEPLOY.md

@@ -1,10 +1,8 @@
 "use strict";
 
-const ADMIN_PASSWORD = "admin123";
 const STORAGE_KEYS = {
-  products: "pontoPapel.products",
   cart: "pontoPapel.cart",
-  whatsapp: "pontoPapel.whatsapp",
+  clientId: "pontoPapel.clientId",
 };
 const DEFAULT_WHATSAPP = "5531989319971";
 const starterProducts = [
@@ -34,6 +32,7 @@ const instagramPosts = [
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+const API_BASE_URL = String((window.APP_CONFIG || {}).apiBaseUrl || "").replace(/\/$/, "");
 const readStored = (key, fallback) => {
   try {
     const stored = localStorage.getItem(key);
@@ -54,15 +53,57 @@ const writeStored = (key, value) => {
   }
 };
 
-let products = readStored(STORAGE_KEYS.products, null);
-if (!Array.isArray(products)) {
-  products = starterProducts;
-  writeStored(STORAGE_KEYS.products, products);
+let products = [];
+let whatsappNumber = DEFAULT_WHATSAPP;
+let adminToken = sessionStorage.getItem("pontoPapel.adminToken") || "";
+let clientId = localStorage.getItem(STORAGE_KEYS.clientId);
+if (!clientId) {
+  clientId = crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(STORAGE_KEYS.clientId, clientId);
 }
 let cart = readStored(STORAGE_KEYS.cart, []);
 if (!Array.isArray(cart)) cart = [];
 let activeCategory = "Todos";
 let toastTimer;
+
+async function apiRequest(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (options.body) headers["Content-Type"] = "application/json";
+  if (adminToken) headers["X-Admin-Token"] = adminToken;
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Não foi possível concluir a operação.");
+  return data;
+}
+
+async function loadWebsiteData() {
+  try {
+    const [loadedProducts, settings, serverCart] = await Promise.all([
+      apiRequest("/api/products"),
+      apiRequest("/api/settings"),
+      apiRequest(`/api/cart?client_id=${encodeURIComponent(clientId)}`),
+    ]);
+    products = Array.isArray(loadedProducts) ? loadedProducts : [];
+    whatsappNumber = settings.whatsapp || DEFAULT_WHATSAPP;
+    if (serverCart.length) {
+      cart = serverCart;
+      writeStored(STORAGE_KEYS.cart, cart);
+    } else {
+      cart = cart.filter((entry) => products.some((product) => product.id === entry.id));
+      await persistCart();
+    }
+  } catch (error) {
+    console.error(error);
+    if (!API_BASE_URL) {
+      products = starterProducts;
+      whatsappNumber = DEFAULT_WHATSAPP;
+    }
+    showToast("Não foi possível carregar os dados da loja.");
+  }
+  renderProducts();
+  renderAdminProducts();
+  renderCart();
+}
 
 const formatPrice = (value) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -74,8 +115,13 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
+function productImageUrl(image) {
+  if (!image || /^(https?:|data:|blob:)/i.test(image) || !API_BASE_URL) return image;
+  return `${API_BASE_URL}/${image.replace(/^\/+/, "")}`;
+}
+
 function productImage(product, extraClass = "") {
-  if (product.image) return `<img class="product-image ${extraClass}" src="${product.image}" alt="${escapeHtml(product.name)}" loading="lazy">`;
+  if (product.image) return `<img class="product-image ${extraClass}" src="${escapeHtml(productImageUrl(product.image))}" alt="${escapeHtml(product.name)}" loading="lazy">`;
   const tone = Number(String(product.id).replace(/\D/g, "").slice(-1) || 0) % 4;
   return `<div class="product-placeholder tone-${tone} ${extraClass}" role="img" aria-label="${escapeHtml(product.name)}">${escapeHtml(product.symbol || "✳")}</div>`;
 }
@@ -136,9 +182,20 @@ function renderInstagramPosts() {
   `).join("");
 }
 
+async function persistCart() {
+  await apiRequest("/api/cart", {
+    method: "POST",
+    body: JSON.stringify({ client_id: clientId, items: cart }),
+  });
+}
+
 function saveCart() {
   writeStored(STORAGE_KEYS.cart, cart);
   renderCart();
+  persistCart().catch((error) => {
+    console.error(error);
+    showToast("A sacola não foi sincronizada com o servidor.");
+  });
 }
 
 function addToCart(id) {
@@ -205,7 +262,7 @@ function openAdmin() {
   $("#adminModal").classList.add("visible");
   $("#adminModal").setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  if (sessionStorage.getItem("pontoPapel.admin") === "true") showAdminContent();
+  if (adminToken) showAdminContent();
   else window.setTimeout(() => $("#adminPassword").focus(), 100);
 }
 
@@ -218,8 +275,7 @@ function closeAdmin() {
 function showAdminContent() {
   $("#adminLogin").hidden = true;
   $("#adminContent").hidden = false;
-  const phone = readStored(STORAGE_KEYS.whatsapp, DEFAULT_WHATSAPP) || DEFAULT_WHATSAPP;
-  $("#whatsappNumber").value = phone;
+  $("#whatsappNumber").value = whatsappNumber;
   renderAdminProducts();
 }
 
@@ -227,15 +283,15 @@ function renderAdminProducts() {
   $("#adminProductCount").textContent = `${products.length} ${products.length === 1 ? "item" : "itens"}`;
   $("#adminProductList").innerHTML = products.map((product) => `
     <div class="admin-product-row">
-      ${product.image ? `<img src="${product.image}" alt="">` : `<div class="product-placeholder">${escapeHtml(product.symbol || "✳")}</div>`}
+      ${product.image ? `<img src="${escapeHtml(productImageUrl(product.image))}" alt="">` : `<div class="product-placeholder">${escapeHtml(product.symbol || "✳")}</div>`}
       <div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category || "Papelaria")} · ${formatPrice(product.price)}</small></div>
       <button class="delete-product" type="button" data-delete="${escapeHtml(product.id)}">Excluir</button>
     </div>
   `).join("");
 }
 
-function checkout() {
-  const phone = String(readStored(STORAGE_KEYS.whatsapp, DEFAULT_WHATSAPP) || DEFAULT_WHATSAPP).replace(/\D/g, "");
+async function checkout() {
+  const phone = String(whatsappNumber || DEFAULT_WHATSAPP).replace(/\D/g, "");
   if (!phone) {
     showToast("A loja ainda não configurou o WhatsApp. Avise o administrador.");
     return;
@@ -253,6 +309,20 @@ function checkout() {
     return sum + product.price * entry.quantity;
   }, 0);
   const message = `Olá! Gostaria de fazer este pedido:\n\n${lines.join("\n")}\n\n*Total dos produtos: ${formatPrice(total)}*\n\nPodemos combinar o pagamento e a entrega?`;
+  try {
+    await apiRequest("/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        subtotal: total,
+        items: cart.map((entry) => {
+          const product = products.find((item) => item.id === entry.id);
+          return { id: product.id, name: product.name, price: product.price, quantity: entry.quantity };
+        }),
+      }),
+    });
+  } catch (error) {
+    console.error(error);
+  }
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
 }
 
@@ -295,15 +365,20 @@ $$("[data-close-admin]").forEach((button) => button.addEventListener("click", cl
 $("#adminModal").addEventListener("click", (event) => {
   if (event.target === $("#adminModal")) closeAdmin();
 });
-$("#loginForm").addEventListener("submit", (event) => {
+$("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  if ($("#adminPassword").value !== ADMIN_PASSWORD) {
-    showToast("Senha incorreta. Tente novamente.");
+  try {
+    const result = await apiRequest("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ password: $("#adminPassword").value }),
+    });
+    adminToken = result.token;
+    sessionStorage.setItem("pontoPapel.adminToken", adminToken);
+    showAdminContent();
+  } catch (error) {
+    showToast(error.message);
     $("#adminPassword").select();
-    return;
   }
-  sessionStorage.setItem("pontoPapel.admin", "true");
-  showAdminContent();
 });
 $("#productForm").addEventListener("change", async (event) => {
   if (event.target.name !== "image") return;
@@ -349,9 +424,11 @@ $("#productForm").addEventListener("submit", async (event) => {
       showToast("Confira o nome e o preço do produto.");
       return;
     }
-    const updatedProducts = [product, ...products];
-    if (!writeStored(STORAGE_KEYS.products, updatedProducts)) return;
-    products = updatedProducts;
+    await apiRequest("/api/products", {
+      method: "POST",
+      body: JSON.stringify(product),
+    });
+    await loadWebsiteData();
     form.reset();
     $("#imagePreview").innerHTML = "<span>Prévia da imagem</span>";
     renderProducts();
@@ -367,9 +444,9 @@ $("#adminProductList").addEventListener("click", (event) => {
   if (!button) return;
   const product = products.find((item) => item.id === button.dataset.delete);
   if (!product || !window.confirm(`Remover "${product.name}" do catálogo?`)) return;
-  const updatedProducts = products.filter((item) => item.id !== product.id);
-  if (!writeStored(STORAGE_KEYS.products, updatedProducts)) return;
-  products = updatedProducts;
+  apiRequest(`/api/product?id=${encodeURIComponent(product.id)}`, { method: "DELETE" })
+    .then(() => loadWebsiteData())
+    .catch((error) => showToast(error.message));
   cart = cart.filter((item) => item.id !== product.id);
   writeStored(STORAGE_KEYS.cart, cart);
   renderProducts();
@@ -384,10 +461,17 @@ $("#storeSettings").addEventListener("submit", (event) => {
     showToast("Use o formato com país e DDD. Ex.: 5511999999999.");
     return;
   }
-  if (writeStored(STORAGE_KEYS.whatsapp, phone)) showToast("WhatsApp da loja salvo!");
+  apiRequest("/api/settings/whatsapp", {
+    method: "PUT",
+    body: JSON.stringify({ whatsapp: phone }),
+  }).then((settings) => {
+    whatsappNumber = settings.whatsapp;
+    showToast("WhatsApp da loja salvo!");
+  }).catch((error) => showToast(error.message));
 });
 $("#logoutButton").addEventListener("click", () => {
-  sessionStorage.removeItem("pontoPapel.admin");
+  adminToken = "";
+  sessionStorage.removeItem("pontoPapel.adminToken");
   $("#adminContent").hidden = true;
   $("#adminLogin").hidden = false;
   $("#loginForm").reset();
@@ -409,6 +493,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 $("#currentYear").textContent = new Date().getFullYear();
-renderProducts();
+$("#adminLoginHint").textContent = API_BASE_URL
+  ? "Acesso protegido pela senha configurada no servidor."
+  : "Acesso inicial: admin123 · Defina ADMIN_PASSWORD no servidor antes de publicar.";
 renderInstagramPosts();
-renderCart();
+loadWebsiteData();

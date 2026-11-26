@@ -1,0 +1,2 @@
+mysql-connector-python>=9.0,<10
+vercel-blob>=0.5.0,<1

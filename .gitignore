@@ -1,0 +1,9 @@
+/.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+papelaria.db
+papelaria.db-shm
+papelaria.db-wal
+uploads/
