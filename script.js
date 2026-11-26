@@ -1,414 +1,205 @@
-"use strict";
-
-const ADMIN_PASSWORD = "admin123";
-const STORAGE_KEYS = {
-  products: "pontoPapel.products",
-  cart: "pontoPapel.cart",
-  whatsapp: "pontoPapel.whatsapp",
-};
-const DEFAULT_WHATSAPP = "5531989319971";
-const starterProducts = [
-  { id: "starter-1", name: "Caderno Meu Lugar", category: "Cadernos", price: 42.9, description: "Um espaço todo seu para ideias, planos e rabiscos.", symbol: "✳" },
-  { id: "starter-2", name: "Kit Canetas Jardim", category: "Escrita", price: 24.9, description: "Cores bonitas para deixar cada palavra especial.", symbol: "✿" },
-  { id: "starter-3", name: "Planner da Semana", category: "Organização", price: 36.5, description: "Organize seus dias com leveza e um toque de cor.", symbol: "☼" },
-  { id: "starter-4", name: "Bloco Boas Ideias", category: "Criatividade", price: 18.9, description: "Para aquela ideia boa que aparece de repente.", symbol: "♡" },
-  { id: "starter-5", name: "Marca-páginas Flores", category: "Presentes", price: 12.5, description: "Um carinho para acompanhar a próxima leitura.", symbol: "❀" },
-  { id: "starter-6", name: "Estojo Dia Feliz", category: "Organização", price: 32.9, description: "Seu material favorito sempre por perto.", symbol: "✦" },
-  { id: "starter-7", name: "Cartões para Presentear", category: "Presentes", price: 16.9, description: "Palavras escritas à mão fazem toda a diferença.", symbol: "♡" },
-  { id: "starter-8", name: "Aquarela Pequenos Mundos", category: "Criatividade", price: 49.9, description: "Um convite colorido para experimentar e criar.", symbol: "✿" },
-];
-const instagramPosts = [
-  { code: "De_5EZhoGfd", caption: "Enfeites de Natal 🌲🎁☃️", image: "post-01.webp", alt: "Enfeites de Natal" },
-  { code: "De_3bGsIFiN", caption: "Brilho labial 💄✨", image: "post-02.webp", alt: "Brilho labial" },
-  { code: "DcjUa3WIF5G", caption: "Chapéus country 👒", image: "post-03.webp", alt: "Chapéu country" },
-  { code: "DcjUOltIHCQ", caption: "Meia calça infantil - bebê", image: "post-04.webp", alt: "Meia-calça infantil para bebê" },
-  { code: "DcjUBKHoHDT", caption: "Meias de bebê 🍼🩷🩵", image: "post-05.webp", alt: "Meias de bebê" },
-  { code: "DcjIgvIoH_9", caption: "Fones bluetooth", image: "post-06.webp", alt: "Fones Bluetooth" },
-  { code: "DcjH-L1PYGW", caption: "Limpa contato", image: "post-07.webp", alt: "Produto limpa-contato" },
-  { code: "DcjHz6toFk2", caption: "Bonés 🧢", image: "post-08.webp", alt: "Bonés" },
-  { code: "DcjHmgDIBd7", caption: "Boias circular 🏊🏻", image: "post-09.webp", alt: "Boias para piscina" },
-  { code: "Dci-whtBikD", caption: "Cartinha de colecionador - BTS 💜", image: "post-10.webp", alt: "Cartinha colecionável do BTS" },
-  { code: "Dci-fj6PpfM", caption: "Casinha de bonecas 🩷", image: "post-11.webp", alt: "Casinha de bonecas" },
-  { code: "Dci8RGPnBDc", caption: "Chinelo Atlético e Cruzeiro ⚽", image: "post-12.webp", alt: "Chinelos dos times Atlético e Cruzeiro" },
-];
-
-const $ = (selector, root = document) => root.querySelector(selector);
-const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
-const readStored = (key, fallback) => {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored === null ? fallback : JSON.parse(stored);
-  } catch (error) {
-    console.error(`Não foi possível ler ${key} do armazenamento local.`, error);
-    return fallback;
-  }
-};
-const writeStored = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (error) {
-    console.error(`Não foi possível salvar ${key} no armazenamento local.`, error);
-    showToast("Não foi possível salvar. Verifique o espaço disponível no navegador.");
-    return false;
-  }
-};
-
-let products = readStored(STORAGE_KEYS.products, null);
-if (!Array.isArray(products)) {
-  products = starterProducts;
-  writeStored(STORAGE_KEYS.products, products);
+:root {
+  --paper: #f7f2e9; --ink: #2b100e; --muted: #76645a; --wine: #651e23; --wine-dark: #451317;
+  --gold: #c8a54b; --pink: #b96a55; --line: #e6dacf;
+  --serif: "Playfair Display", Georgia, serif; --sans: "DM Sans", Arial, sans-serif;
 }
-let cart = readStored(STORAGE_KEYS.cart, []);
-if (!Array.isArray(cart)) cart = [];
-let activeCategory = "Todos";
-let toastTimer;
-
-const formatPrice = (value) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-function showToast(message) {
-  const toast = $("#toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2800);
-}
-
-function productImage(product, extraClass = "") {
-  if (product.image) return `<img class="product-image ${extraClass}" src="${product.image}" alt="${escapeHtml(product.name)}" loading="lazy">`;
-  const tone = Number(String(product.id).replace(/\D/g, "").slice(-1) || 0) % 4;
-  return `<div class="product-placeholder tone-${tone} ${extraClass}" role="img" aria-label="${escapeHtml(product.name)}">${escapeHtml(product.symbol || "✳")}</div>`;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]);
-}
-
-function renderCategories() {
-  const categories = ["Todos", ...new Set(products.map((product) => product.category).filter(Boolean))];
-  if (activeCategory !== "Todos" && !categories.includes(activeCategory)) activeCategory = "Todos";
-  $("#categoryList").innerHTML = categories.map((category) => `
-    <button class="category-button ${category === activeCategory ? "active" : ""}" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>
-  `).join("");
-}
-
-function renderProducts() {
-  renderCategories();
-  const query = $("#productSearch").value.trim().toLocaleLowerCase("pt-BR");
-  const visibleProducts = products.filter((product) => {
-    const matchesCategory = activeCategory === "Todos" || product.category === activeCategory;
-    const matchesQuery = `${product.name} ${product.category} ${product.description || ""}`.toLocaleLowerCase("pt-BR").includes(query);
-    return matchesCategory && matchesQuery;
-  });
-  $("#productGrid").innerHTML = visibleProducts.map((product) => `
-    <article class="product-card">
-      <div class="product-image-wrap">
-        ${productImage(product)}
-        ${product.isNew ? '<span class="product-badge">NOVIDADE</span>' : ""}
-        <button class="quick-add" type="button" data-add="${escapeHtml(product.id)}" aria-label="Adicionar ${escapeHtml(product.name)} à sacola">+</button>
-      </div>
-      <div class="product-info">
-        <span class="product-category">${escapeHtml(product.category || "Papelaria")}</span>
-        <h3>${escapeHtml(product.name)}</h3>
-        ${product.description ? `<p class="product-description">${escapeHtml(product.description)}</p>` : ""}
-        <span class="product-price">${formatPrice(product.price)}</span>
-      </div>
-    </article>
-  `).join("");
-  $("#emptyState").hidden = visibleProducts.length > 0;
-}
-
-function renderInstagramPosts() {
-  $("#instagramGrid").innerHTML = instagramPosts.map((post) => `
-    <article class="instagram-card">
-      <a class="instagram-image-link" href="https://www.instagram.com/p/${post.code}/" target="_blank" rel="noopener noreferrer" aria-label="Ver publicação: ${escapeHtml(post.caption)}">
-        <img src="assets/instagram/${post.image}" alt="${escapeHtml(post.alt)}" loading="lazy">
-        <span class="instagram-overlay">Ver publicação <span>↗</span></span>
-      </a>
-      <div class="instagram-card-copy">
-        <span class="instagram-handle">@armarinhosheknah</span>
-        <p>${escapeHtml(post.caption)}</p>
-        <a href="https://www.instagram.com/p/${post.code}/" target="_blank" rel="noopener noreferrer">Ver no Instagram ↗</a>
-      </div>
-    </article>
-  `).join("");
-}
-
-function saveCart() {
-  writeStored(STORAGE_KEYS.cart, cart);
-  renderCart();
-}
-
-function addToCart(id) {
-  const product = products.find((item) => item.id === id);
-  if (!product) return;
-  const existing = cart.find((item) => item.id === id);
-  if (existing) existing.quantity += 1;
-  else cart.push({ id, quantity: 1 });
-  saveCart();
-  showToast(`${product.name} adicionado à sacola!`);
-}
-
-function updateQuantity(id, amount) {
-  const item = cart.find((entry) => entry.id === id);
-  if (!item) return;
-  item.quantity += amount;
-  if (item.quantity <= 0) cart = cart.filter((entry) => entry.id !== id);
-  saveCart();
-}
-
-function renderCart() {
-  cart = cart.filter((entry) => products.some((product) => product.id === entry.id) && Number(entry.quantity) > 0);
-  const count = cart.reduce((total, item) => total + item.quantity, 0);
-  const items = cart.map((entry) => ({ ...entry, product: products.find((item) => item.id === entry.id) }));
-  const subtotal = items.reduce((total, entry) => total + Number(entry.product.price) * entry.quantity, 0);
-  $("#cartCount").textContent = count;
-  $("#drawerItemCount").textContent = count ? `(${count})` : "";
-  $("#cartSubtotal").textContent = formatPrice(subtotal);
-  $("#cartEmpty").hidden = count > 0;
-  $("#cartFooter").hidden = count === 0;
-  $("#cartItems").innerHTML = items.map(({ product, quantity }) => `
-    <div class="cart-item">
-      ${productImage(product, "cart-item-image")}
-      <div class="cart-item-detail">
-        <h3>${escapeHtml(product.name)}</h3><span>${formatPrice(product.price)}</span>
-        <div class="quantity-control">
-          <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="-1" aria-label="Diminuir quantidade">−</button>
-          <span>${quantity}</span>
-          <button type="button" data-quantity="${escapeHtml(product.id)}" data-change="1" aria-label="Aumentar quantidade">+</button>
-        </div>
-      </div>
-      <button class="remove-item" type="button" data-remove="${escapeHtml(product.id)}" aria-label="Remover ${escapeHtml(product.name)}">×</button>
-    </div>
-  `).join("");
-}
-
-function openCart() {
-  $("#overlay").classList.add("visible");
-  $("#cartDrawer").classList.add("open");
-  $("#cartDrawer").setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  $("#cartOpen").setAttribute("aria-expanded", "true");
-}
-
-function closeCart() {
-  $("#overlay").classList.remove("visible");
-  $("#cartDrawer").classList.remove("open");
-  $("#cartDrawer").setAttribute("aria-hidden", "true");
-  if (!$("#adminModal").classList.contains("visible")) document.body.classList.remove("modal-open");
-  $("#cartOpen").setAttribute("aria-expanded", "false");
-}
-
-function openAdmin() {
-  $("#adminModal").classList.add("visible");
-  $("#adminModal").setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  if (sessionStorage.getItem("pontoPapel.admin") === "true") showAdminContent();
-  else window.setTimeout(() => $("#adminPassword").focus(), 100);
-}
-
-function closeAdmin() {
-  $("#adminModal").classList.remove("visible");
-  $("#adminModal").setAttribute("aria-hidden", "true");
-  if (!$("#cartDrawer").classList.contains("open")) document.body.classList.remove("modal-open");
-}
-
-function showAdminContent() {
-  $("#adminLogin").hidden = true;
-  $("#adminContent").hidden = false;
-  const phone = readStored(STORAGE_KEYS.whatsapp, DEFAULT_WHATSAPP) || DEFAULT_WHATSAPP;
-  $("#whatsappNumber").value = phone;
-  renderAdminProducts();
-}
-
-function renderAdminProducts() {
-  $("#adminProductCount").textContent = `${products.length} ${products.length === 1 ? "item" : "itens"}`;
-  $("#adminProductList").innerHTML = products.map((product) => `
-    <div class="admin-product-row">
-      ${product.image ? `<img src="${product.image}" alt="">` : `<div class="product-placeholder">${escapeHtml(product.symbol || "✳")}</div>`}
-      <div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category || "Papelaria")} · ${formatPrice(product.price)}</small></div>
-      <button class="delete-product" type="button" data-delete="${escapeHtml(product.id)}">Excluir</button>
-    </div>
-  `).join("");
-}
-
-function checkout() {
-  const phone = String(readStored(STORAGE_KEYS.whatsapp, DEFAULT_WHATSAPP) || DEFAULT_WHATSAPP).replace(/\D/g, "");
-  if (!phone) {
-    showToast("A loja ainda não configurou o WhatsApp. Avise o administrador.");
-    return;
-  }
-  if (phone.length < 12 || phone.length > 13) {
-    showToast("O WhatsApp da loja precisa incluir o código do país e o DDD.");
-    return;
-  }
-  const lines = cart.map((entry) => {
-    const product = products.find((item) => item.id === entry.id);
-    return `• ${entry.quantity}x ${product.name} — ${formatPrice(product.price * entry.quantity)}`;
-  });
-  const total = cart.reduce((sum, entry) => {
-    const product = products.find((item) => item.id === entry.id);
-    return sum + product.price * entry.quantity;
-  }, 0);
-  const message = `Olá! Gostaria de fazer este pedido:\n\n${lines.join("\n")}\n\n*Total dos produtos: ${formatPrice(total)}*\n\nPodemos combinar o pagamento e a entrega?`;
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
-}
-
-function readImageAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Não foi possível ler a imagem selecionada."));
-    reader.readAsDataURL(file);
-  });
-}
-
-$("#productGrid").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-add]");
-  if (button) addToCart(button.dataset.add);
-});
-$("#categoryList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-category]");
-  if (!button) return;
-  activeCategory = button.dataset.category;
-  renderProducts();
-});
-$("#productSearch").addEventListener("input", renderProducts);
-$("#cartOpen").addEventListener("click", openCart);
-$("#overlay").addEventListener("click", closeCart);
-$$("[data-close]").forEach((button) => button.addEventListener("click", closeCart));
-$("#keepShopping").addEventListener("click", closeCart);
-$("#cartItems").addEventListener("click", (event) => {
-  const quantityButton = event.target.closest("[data-quantity]");
-  const removeButton = event.target.closest("[data-remove]");
-  if (quantityButton) updateQuantity(quantityButton.dataset.quantity, Number(quantityButton.dataset.change));
-  if (removeButton) {
-    cart = cart.filter((item) => item.id !== removeButton.dataset.remove);
-    saveCart();
-  }
-});
-$("#checkoutButton").addEventListener("click", checkout);
-$("#adminOpen").addEventListener("click", openAdmin);
-$$("[data-close-admin]").forEach((button) => button.addEventListener("click", closeAdmin));
-$("#adminModal").addEventListener("click", (event) => {
-  if (event.target === $("#adminModal")) closeAdmin();
-});
-$("#loginForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  if ($("#adminPassword").value !== ADMIN_PASSWORD) {
-    showToast("Senha incorreta. Tente novamente.");
-    $("#adminPassword").select();
-    return;
-  }
-  sessionStorage.setItem("pontoPapel.admin", "true");
-  showAdminContent();
-});
-$("#productForm").addEventListener("change", async (event) => {
-  if (event.target.name !== "image") return;
-  const file = event.target.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    event.target.value = "";
-    $("#imagePreview").innerHTML = "<span>Imagem maior que 2 MB. Escolha um arquivo menor.</span>";
-    return;
-  }
-  try {
-    const dataUrl = await readImageAsDataUrl(file);
-    $("#imagePreview").innerHTML = `<img src="${dataUrl}" alt="Prévia da imagem selecionada">`;
-  } catch (error) {
-    console.error(error);
-    showToast("Não foi possível abrir essa imagem.");
-  }
-});
-$("#productForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = new FormData(form);
-  const file = data.get("image");
-  if (!(file instanceof File) || !file.size) {
-    showToast("Selecione uma imagem para o produto.");
-    return;
-  }
-  if (file.size > 2 * 1024 * 1024) {
-    showToast("A imagem deve ter no máximo 2 MB.");
-    return;
-  }
-  try {
-    const image = await readImageAsDataUrl(file);
-    const product = {
-      id: `product-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: String(data.get("name")).trim(),
-      price: Number(data.get("price")),
-      category: String(data.get("category")),
-      description: String(data.get("description")).trim(),
-      image,
-    };
-    if (!product.name || !Number.isFinite(product.price) || product.price <= 0) {
-      showToast("Confira o nome e o preço do produto.");
-      return;
-    }
-    const updatedProducts = [product, ...products];
-    if (!writeStored(STORAGE_KEYS.products, updatedProducts)) return;
-    products = updatedProducts;
-    form.reset();
-    $("#imagePreview").innerHTML = "<span>Prévia da imagem</span>";
-    renderProducts();
-    renderAdminProducts();
-    showToast("Produto adicionado ao catálogo!");
-  } catch (error) {
-    console.error(error);
-    showToast("Não foi possível adicionar o produto.");
-  }
-});
-$("#adminProductList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-delete]");
-  if (!button) return;
-  const product = products.find((item) => item.id === button.dataset.delete);
-  if (!product || !window.confirm(`Remover "${product.name}" do catálogo?`)) return;
-  const updatedProducts = products.filter((item) => item.id !== product.id);
-  if (!writeStored(STORAGE_KEYS.products, updatedProducts)) return;
-  products = updatedProducts;
-  cart = cart.filter((item) => item.id !== product.id);
-  writeStored(STORAGE_KEYS.cart, cart);
-  renderProducts();
-  renderAdminProducts();
-  renderCart();
-  showToast("Produto removido.");
-});
-$("#storeSettings").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const phone = $("#whatsappNumber").value.replace(/\D/g, "");
-  if (phone.length < 12 || phone.length > 13) {
-    showToast("Use o formato com país e DDD. Ex.: 5511999999999.");
-    return;
-  }
-  if (writeStored(STORAGE_KEYS.whatsapp, phone)) showToast("WhatsApp da loja salvo!");
-});
-$("#logoutButton").addEventListener("click", () => {
-  sessionStorage.removeItem("pontoPapel.admin");
-  $("#adminContent").hidden = true;
-  $("#adminLogin").hidden = false;
-  $("#loginForm").reset();
-  showToast("Você saiu do modo administrador.");
-});
-$("#menuToggle").addEventListener("click", () => {
-  const isOpen = $("#mainNav").classList.toggle("open");
-  $("#menuToggle").setAttribute("aria-expanded", String(isOpen));
-  $("#menuToggle").setAttribute("aria-label", isOpen ? "Fechar menu" : "Abrir menu");
-});
-$$(".main-nav a").forEach((link) => link.addEventListener("click", () => {
-  $("#mainNav").classList.remove("open");
-  $("#menuToggle").setAttribute("aria-expanded", "false");
-}));
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  closeCart();
-  closeAdmin();
-});
-
-$("#currentYear").textContent = new Date().getFullYear();
-renderProducts();
-renderInstagramPosts();
-renderCart();
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 85px; }
+body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--sans); font-size: 15px; }
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+[hidden] { display: none !important; }
+.announcement { min-height: 31px; padding: 7px 16px; text-align: center; background: var(--wine); color: #fff; font-size: 11px; letter-spacing: .09em; }
+.site-header { height: 82px; max-width: 1280px; margin: auto; padding: 0 42px; display: flex; align-items: center; justify-content: space-between; gap: 30px; background: var(--paper); position: relative; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; line-height: 1; font-weight: 700; white-space: nowrap; letter-spacing: -.05em; }
+.brand i { color: #a47c2e; font-family: var(--serif); }
+.brand small { display: block; margin-top: 6px; font-size: 8px; letter-spacing: .2em; font-weight: 600; }
+.brand-mark { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--wine); font-family: var(--serif); font-size: 22px; font-weight: 600; }
+.brand-logo { display: block; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); background: var(--wine); }
+.main-nav { display: flex; align-items: center; gap: 38px; margin-left: auto; }
+.main-nav a { color: #5a594f; font-size: 13px; transition: color .2s; }
+.main-nav a:hover, .text-link:hover { color: var(--wine); }
+.header-actions { display: flex; align-items: center; gap: 18px; }
+.icon-button, .cart-button { border: 0; background: transparent; color: var(--ink); }
+.icon-button { font-size: 22px; padding: 6px; }
+.cart-button { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cart-icon { font-size: 22px; transform: rotate(180deg); }
+.cart-count { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 50%; color: white; background: var(--wine); font-size: 10px; }
+.menu-toggle { display: none; background: none; border: 0; font-size: 23px; }
+.hero { position: relative; overflow: hidden; min-height: 525px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 45px max(calc((100vw - 1130px) / 2), 8%); background: #f0e8dc; }
+.hero-copy { position: relative; z-index: 2; padding-bottom: 12px; }
+.eyebrow { color: #806b56; font-size: 9px; font-weight: 700; letter-spacing: .18em; }
+.eyebrow-line { display: inline-block; width: 23px; height: 1px; margin: 0 9px 3px 0; background: #b28f4c; }
+h1, h2, h3, p { margin-top: 0; }
+.hero h1 { margin: 20px 0 16px; font-family: var(--serif); font-size: clamp(45px, 5.2vw, 66px); line-height: 1.04; letter-spacing: -.055em; font-weight: 600; }
+h1 em, h2 em { color: var(--wine); font-weight: 600; }
+.hero-copy > p { max-width: 370px; margin-bottom: 27px; color: #6d6c61; font-size: 13px; line-height: 1.8; }
+.button { min-height: 48px; display: inline-flex; justify-content: center; align-items: center; gap: 24px; padding: 0 21px; border: 1px solid transparent; font-size: 11px; font-weight: 600; transition: .2s ease; }
+.button-dark { color: #fff; background: var(--wine); }
+.button-dark:hover { background: var(--wine-dark); transform: translateY(-1px); }
+.button span { font-size: 17px; }
+.hero-note { display: flex; align-items: center; gap: 9px; margin-top: 30px; color: #77766a; font-size: 10px; }
+.note-stars { color: var(--gold); font-size: 18px; }
+.hero-art { position: relative; width: min(100%, 470px); height: 430px; margin-left: auto; }
+.sun-shape { position: absolute; width: 350px; height: 350px; top: 39px; left: 62px; border-radius: 50%; background: #e5d5b5; }
+.hero-book { position: absolute; top: 61px; left: 119px; width: 226px; height: 315px; transform: rotate(8deg); overflow: hidden; border-radius: 3px 13px 13px 3px; background: #fbf5e9; box-shadow: 14px 19px 30px #47241f2e, inset 8px 0 #e8dcc7; }
+.book-spine { position: absolute; left: 18px; top: 0; height: 100%; width: 2px; background: #d4c2a4; }
+.book-title { position: absolute; top: 76px; left: 42px; color: var(--wine); font-family: var(--serif); font-size: 31px; line-height: 1.2; }
+.book-title em { color: #9d5148; }
+.book-title span { position: absolute; top: 102px; right: -44px; color: var(--gold); font-size: 33px; }
+.book-lines { position: absolute; right: 24px; bottom: 35px; width: 101px; height: 31px; border-top: 1px solid #d7c9b2; border-bottom: 1px solid #d7c9b2; }
+.hero-pencil { position: absolute; width: 13px; height: 236px; top: 92px; left: 373px; border-radius: 8px; background: #914843; transform: rotate(22deg); box-shadow: inset 3px 0 #bc7967; }
+.hero-pencil::before { content: ""; position: absolute; top: -13px; left: 0; border-left: 6.5px solid transparent; border-right: 6.5px solid transparent; border-bottom: 15px solid #d1b987; }
+.hero-pencil::after { content: ""; position: absolute; bottom: 5px; left: 3px; width: 7px; height: 3px; border-radius: 50%; background: #74502e; }
+.hero-sticker { position: absolute; z-index: 2; display: grid; place-items: center; text-align: center; border-radius: 50%; font-family: var(--serif); line-height: 1.25; }
+.sticker-one { top: 31px; right: 8px; width: 85px; height: 85px; color: #fff8e9; background: #762b27; font-size: 14px; transform: rotate(10deg); }
+.sticker-one span { font-size: 13px; }
+.sticker-two { left: 34px; bottom: 40px; width: 95px; height: 95px; color: #5a2920; background: #d7bd7b; font-size: 14px; transform: rotate(-12deg); }
+.hero-flower { position: absolute; right: 47px; bottom: 42px; color: #9b5046; font-size: 51px; }
+.hero-caption { position: absolute; left: 46px; top: 81px; color: #806b56; font-size: 8px; line-height: 1.5; letter-spacing: .14em; transform: rotate(-10deg); }
+.benefits { min-height: 88px; padding: 20px 9%; display: flex; align-items: center; justify-content: center; gap: clamp(32px, 8vw, 115px); border-bottom: 1px solid var(--line); background: #fcfaf5; }
+.benefits div { color: #656458; font-size: 11px; }
+.benefits span { margin-right: 8px; color: #a47c2e; font-size: 17px; vertical-align: -2px; }
+.shop-section { max-width: 1190px; margin: auto; padding: 93px 38px 100px; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 36px; }
+.section-heading h2, .about-copy h2 { margin: 12px 0 0; font-family: var(--serif); font-size: clamp(34px, 4vw, 45px); letter-spacing: -.045em; font-weight: 600; line-height: 1.15; }
+.section-heading > p { margin: 0 4px 4px 20px; color: #77766a; font-size: 11px; line-height: 1.8; }
+.section-heading > p small { color: #8a897d; font-size: 9px; }
+.shop-toolbar { min-height: 45px; display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 25px; border-bottom: 1px solid var(--line); }
+.category-list { display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; }
+.category-list::-webkit-scrollbar { display: none; }
+.category-button { flex: 0 0 auto; padding: 0 0 12px; color: #77766a; background: none; border: 0; border-bottom: 2px solid transparent; font-size: 11px; }
+.category-button.active { color: var(--wine); border-color: var(--wine); font-weight: 700; }
+.search-box { display: flex; align-items: center; gap: 6px; padding: 0 0 10px; color: #77766a; }
+.search-box span { font-size: 24px; transform: rotate(-20deg); }
+.search-box input { width: 165px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 10px; }
+.search-box input::placeholder { color: #929084; }
+.product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 34px 20px; }
+.product-card { min-width: 0; }
+.product-image-wrap { position: relative; overflow: hidden; aspect-ratio: 1 / 1.06; background: #efede4; }
+.product-image { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
+.product-card:hover .product-image { transform: scale(1.035); }
+.product-placeholder { display: grid; place-items: center; width: 100%; height: 100%; background: linear-gradient(145deg, #eadfcf, #f5e9dc); color: var(--wine); font-family: var(--serif); font-size: 56px; }
+.product-placeholder.tone-1 { background: linear-gradient(145deg, #f0ddd5, #f4ead8); color: #974d42; }
+.product-placeholder.tone-2 { background: linear-gradient(145deg, #e8dfc9, #f4e9d9); }
+.product-placeholder.tone-3 { background: linear-gradient(145deg, #e9dcd7, #f2e7dc); color: #74433f; }
+.product-badge { position: absolute; top: 12px; left: 12px; padding: 6px 9px; color: #5a2920; background: #fbf5e9; font-size: 8px; letter-spacing: .08em; }
+.quick-add { position: absolute; right: 10px; bottom: 10px; width: 35px; height: 35px; border: 0; border-radius: 50%; color: white; background: var(--wine); font-size: 21px; transition: transform .2s; }
+.quick-add:hover { transform: rotate(90deg); }
+.product-info { padding: 13px 2px 0; }
+.product-category { color: #8a897d; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+.product-info h3 { margin: 7px 0 5px; font-family: var(--serif); font-size: 16px; font-weight: 600; }
+.product-description { margin-bottom: 9px; color: #858478; font-size: 10px; line-height: 1.6; }
+.product-price { color: var(--wine); font-size: 12px; font-weight: 700; }
+.empty-state { padding: 48px 16px; text-align: center; }
+.empty-state > span { color: #a47c2e; font-size: 30px; }
+.empty-state h3 { margin: 12px 0 5px; font-family: var(--serif); }
+.empty-state p { color: var(--muted); font-size: 12px; }
+.instagram-section { max-width: 1190px; margin: 0 auto; padding: 0 38px 88px; }
+.instagram-heading { margin-bottom: 25px; }
+.instagram-heading > a { margin: 0 4px 5px 20px; }
+.instagram-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.instagram-card { min-width: 0; overflow: hidden; background: #f2eadf; border: 1px solid var(--line); }
+.instagram-image-link { position: relative; display: block; overflow: hidden; aspect-ratio: 3 / 4; background: #e7dbca; }
+.instagram-image-link img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
+.instagram-card:hover .instagram-image-link img { transform: scale(1.04); }
+.instagram-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: white; background: #451317c7; font-size: 11px; opacity: 0; transition: opacity .2s ease; }
+.instagram-overlay span { font-size: 17px; }
+.instagram-card:hover .instagram-overlay, .instagram-image-link:focus-visible .instagram-overlay { opacity: 1; }
+.instagram-card-copy { padding: 13px 14px 15px; }
+.instagram-handle { color: #858478; font-size: 8px; letter-spacing: .1em; }
+.instagram-card-copy p { min-height: 34px; margin: 7px 0 10px; font-family: var(--serif); font-size: 13px; }
+.instagram-card-copy > a { color: var(--wine); font-size: 9px; font-weight: 700; }
+.about-section { min-height: 345px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 9%; padding: 56px max(calc((100vw - 1020px) / 2), 8%); background: #efe5d7; }
+.about-art { position: relative; min-height: 225px; padding: 35px 45px; overflow: hidden; background: #6a2925; color: #f3e5c7; font-family: var(--serif); font-size: 22px; line-height: 1.15; }
+.about-art strong { display: block; margin-top: 4px; color: #e4c47d; font-size: 38px; line-height: 1.03; }
+.about-art i { position: absolute; right: 28px; bottom: -31px; color: #f4e6c9; font-size: 170px; font-style: normal; opacity: .45; }
+.about-copy h2 { margin: 12px 0 16px; font-size: 35px; }
+.about-copy > p { max-width: 425px; margin-bottom: 19px; color: #737365; font-size: 11px; line-height: 1.9; }
+.text-link { padding: 0; border: 0; color: var(--wine); background: none; font-size: 10px; font-weight: 700; transition: color .2s; }
+.text-link span { margin-left: 8px; font-size: 16px; vertical-align: -2px; }
+.contact-section { max-width: 1120px; margin: auto; padding: 65px 38px; display: flex; justify-content: space-between; align-items: center; gap: 30px; }
+.contact-section h2 { margin: 11px 0; font-family: var(--serif); font-size: clamp(26px, 3.2vw, 36px); letter-spacing: -.04em; font-weight: 600; }
+.contact-section h2 em { color: var(--wine); }
+.contact-section p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.contact-links { display: grid; justify-items: start; gap: 16px; }
+.site-footer { min-height: 108px; padding: 25px max(calc((100vw - 1130px) / 2), 6%); display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.footer-brand { font-size: 16px; }
+.footer-brand .brand-logo { width: 38px; height: 38px; flex-basis: 38px; }
+.footer-brand small { font-size: 7px; }
+.site-footer > p, .site-footer > span { margin: 0; color: #88877a; font-size: 9px; }
+.overlay { position: fixed; z-index: 9; inset: 0; background: #22241fcc; opacity: 0; visibility: hidden; transition: .25s; }
+.overlay.visible { opacity: 1; visibility: visible; }
+.cart-drawer { position: fixed; z-index: 10; top: 0; right: 0; width: min(430px, 100%); height: 100dvh; padding: 29px; display: flex; flex-direction: column; background: var(--paper); transform: translateX(102%); transition: transform .28s ease; }
+.cart-drawer.open { transform: translateX(0); }
+.drawer-header, .admin-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.drawer-header h2, .admin-top h2 { margin: 7px 0 0; font-family: var(--serif); font-size: 28px; }
+.drawer-header h2 span { color: var(--muted); font-family: var(--sans); font-size: 12px; }
+.close-button { width: 35px; height: 35px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: transparent; font-size: 24px; line-height: 1; }
+.cart-items { flex: 1; overflow: auto; padding: 22px 0; }
+.cart-item { display: grid; grid-template-columns: 72px 1fr auto; gap: 13px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.cart-item-image { width: 72px; height: 76px; object-fit: cover; background: #ece9de; }
+.cart-item-image.product-placeholder { font-size: 27px; }
+.cart-item-detail h3 { margin: 3px 0 6px; font-family: var(--serif); font-size: 14px; }
+.cart-item-detail > span { color: var(--wine); font-size: 11px; font-weight: 700; }
+.quantity-control { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.quantity-control button { width: 22px; height: 22px; border: 1px solid var(--line); background: transparent; }
+.quantity-control span { font-size: 11px; }
+.remove-item { align-self: start; border: 0; color: #929084; background: none; font-size: 18px; }
+.cart-empty { margin: auto; text-align: center; color: var(--muted); }
+.cart-empty > span { color: var(--gold); font-size: 43px; }
+.cart-empty p { font-family: var(--serif); font-size: 19px; }
+.cart-footer { padding-top: 20px; border-top: 1px solid var(--line); }
+.subtotal { display: flex; justify-content: space-between; font-size: 13px; }
+.subtotal strong { color: var(--wine); }
+.cart-footer > p { margin: 9px 0 18px; color: #848275; font-size: 10px; }
+.checkout-button { width: 100%; }
+.modal-backdrop { position: fixed; z-index: 12; inset: 0; display: grid; place-items: center; padding: 18px; overflow-y: auto; background: #22241fbd; opacity: 0; visibility: hidden; transition: .2s; }
+.modal-backdrop.visible { opacity: 1; visibility: visible; }
+.admin-panel { width: min(650px, 100%); max-height: min(90dvh, 850px); overflow-y: auto; padding: 30px; background: var(--paper); }
+.admin-login { max-width: 360px; margin: 20px auto 10px; text-align: center; }
+.admin-lock { width: 52px; height: 52px; display: grid; place-items: center; margin: 18px auto 13px; border-radius: 50%; color: var(--wine); background: #efe1c5; font-size: 25px; }
+.admin-login h3 { margin-bottom: 7px; font-family: var(--serif); font-size: 21px; }
+.admin-login > p { color: var(--muted); font-size: 11px; }
+.admin-login form { display: grid; gap: 10px; margin-top: 20px; text-align: left; }
+.admin-login form label, .product-form label, .store-settings label { display: grid; gap: 7px; color: #666558; font-size: 10px; font-weight: 600; }
+.admin-login input, .product-form input, .product-form select, .product-form textarea, .store-settings input { width: 100%; min-height: 40px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 0; outline-color: var(--gold); color: var(--ink); background: #fffefa; font-size: 16px; }
+.admin-login form .button { width: 100%; }
+.demo-hint { display: block; margin-top: 14px; color: #898779; font-size: 9px; line-height: 1.6; }
+.admin-content { margin-top: 18px; }
+.admin-notice { margin-bottom: 19px; padding: 11px; color: #613c27; background: #f0e4cd; font-size: 10px; line-height: 1.6; }
+.product-form { padding: 19px; border: 1px solid var(--line); background: #fbfaf6; }
+.product-form h3, .admin-products-header h3, .store-settings h3 { margin: 0 0 15px; font-family: var(--serif); font-size: 18px; font-weight: 600; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 13px; }
+.product-form textarea { resize: vertical; }
+.product-form input[type="file"] { padding: 7px; }
+.image-preview { height: 94px; margin-top: 12px; display: grid; place-items: center; overflow: hidden; border: 1px dashed #d1cec0; color: #918f81; background: #fffefa; font-size: 10px; }
+.image-preview img { width: 100%; height: 100%; object-fit: contain; }
+.admin-form-actions { display: flex; justify-content: flex-end; margin-top: 13px; }
+.admin-form-actions .button { min-height: 41px; }
+.admin-products-header { display: flex; align-items: center; justify-content: space-between; margin: 23px 0 9px; }
+.admin-products-header h3 { margin: 0; }
+.admin-products-header > span { color: var(--muted); font-size: 10px; }
+.admin-product-row { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.admin-product-row img, .admin-product-row .product-placeholder { width: 44px; height: 44px; object-fit: cover; font-size: 19px; }
+.admin-product-row strong { display: block; font-size: 11px; }
+.admin-product-row small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
+.delete-product { border: 0; color: #a15346; background: transparent; font-size: 10px; }
+.store-settings { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; margin-top: 23px; padding: 16px; border: 1px solid var(--line); }
+.store-settings h3 { grid-column: 1 / -1; margin: 0; }
+.store-settings label { grid-column: 1; }
+.button-outline { min-height: 40px; border-color: var(--wine); color: var(--wine); background: transparent; font-size: 10px; }
+.logout-button { margin-top: 16px; padding: 5px 0; border: 0; color: #a15346; background: transparent; font-size: 10px; }
+.toast { position: fixed; z-index: 20; left: 50%; bottom: 25px; max-width: calc(100% - 32px); padding: 12px 18px; color: white; background: var(--wine-dark); font-size: 11px; opacity: 0; pointer-events: none; transform: translate(-50%, 10px); transition: .2s; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+body.modal-open { overflow: hidden; }
+@media (min-width: 1400px) { .hero { padding-right: calc((100vw - 1130px) / 2); padding-left: calc((100vw - 1130px) / 2); } }
+@media (max-width: 900px) {
+  .site-header { padding: 0 25px; }
+  .site-header > .brand { font-size: 16px; }
+  .site-header > .brand small { letter-spacing: .12em; font-size: 7px; }
+  .main-nav { gap: 22px; }
+  .hero { padding: 38px 6%; }
+  .hero-art { width: 470px; transform: scale(.65); tran
